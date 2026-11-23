@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>聖誕水果忍者</title>
+<style>
+:root{--bg:#0b1a3a;--ink:#fff;--gold:#ffd54f;--red:#e53935;--grn:#2e7d32;--panel:rgba(10,20,50,.88);color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;color:var(--ink);user-select:none;-webkit-user-select:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#hud{position:fixed;left:0;right:0;top:calc(env(safe-area-inset-top,0px) + 8px);display:flex;justify-content:space-between;align-items:flex-start;padding:0 12px;pointer-events:none;font-weight:800;text-shadow:0 2px 6px #000}
+#hud .big{font-size:clamp(28px,7vw,44px);color:var(--gold)}
+#hud .sm{font-size:clamp(16px,4vw,22px)}
+#btns{pointer-events:auto;display:flex;gap:8px}
+#btns button{width:52px;height:52px;border-radius:50%;border:2px solid #fff6;background:#0008;font-size:24px;color:#fff}
+#menu{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(5,10,30,.55);padding:16px}
+#box{background:var(--panel);border:3px solid var(--gold);border-radius:24px;padding:24px 20px;max-width:440px;width:100%;text-align:center;box-shadow:0 10px 40px #000a}
+#box h1{margin:0 0 6px;font-size:clamp(30px,8vw,42px);color:var(--gold)}
+#box p{margin:6px 0 14px;font-size:clamp(16px,4.2vw,20px);line-height:1.5;color:#dbe7ff}
+.b{display:block;width:100%;margin:10px 0;padding:16px;border:0;border-radius:16px;font-size:clamp(20px,5.5vw,26px);font-weight:800;color:#fff;background:var(--grn)}
+.b.r{background:var(--red)}.b.g{background:#455a80}
+.b small{display:block;font-size:.6em;font-weight:500;opacity:.9;margin-top:2px}
+#ban{position:fixed;left:0;right:0;top:32%;text-align:center;font-size:clamp(34px,10vw,64px);font-weight:900;color:var(--gold);text-shadow:0 3px 12px #000;pointer-events:none;opacity:0}
+#ban small{display:block;font-size:.45em;color:#fff;margin-top:6px}
+#ban.show{animation:pop 2.4s ease-out}
+@keyframes pop{0%{opacity:0;transform:scale(.6)}15%{opacity:1;transform:scale(1.1)}25%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud"><div><div class="big" id="sc">0</div><div class="sm" id="lv"></div></div><div class="sm" id="li" style="font-size:clamp(20px,5vw,28px)"></div><div id="btns"><button id="mu">🔊</button><button id="pa">⏸</button></div></div>
+<div id="ban"></div>
+<div id="menu"><div id="box"></div></div>
+<script>
+const $=id=>document.getElementById(id),C=$('c'),X=C.getContext('2d');
+let W,H,R0,snow=[];
+function rs(){const d=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;C.width=W*d;C.height=H*d;X.setTransform(d,0,0,d,0,0);R0=Math.max(34,Math.min(62,Math.min(W,H)*.085));snow=Array.from({length:70},()=>({x:Math.random()*W,y:Math.random()*H,r:1+Math.random()*3,s:15+Math.random()*35,p:Math.random()*6}))}
+addEventListener('resize',rs);rs();
+const EF="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',serif";
+// [emoji, 出現關卡, 分數, 類型(n普通/s特殊), 果汁顏色]
+const IT=[['🍎',1,10,'n','#e53935'],['🍊',1,10,'n','#fb8c00'],['🍉',1,10,'n','#e91e63'],
+['🍋',2,10,'n','#fdd835'],['🍇',2,10,'n','#8e24aa'],['🎄',2,15,'n','#43a047'],
+['🍓',3,10,'n','#e53935'],['🍒',3,10,'n','#c62828'],['🍪',3,15,'n','#a1662f'],
+['🍍',4,10,'n','#fbc02d'],['🥝',4,10,'n','#7cb342'],['⭐',4,20,'n','#ffd54f'],
+['🍑',5,10,'n','#ff8a65'],['🔔',5,20,'n','#ffca28'],['🎁',6,20,'s','#ef5350'],
+['🍭',6,15,'n','#ec407a'],['🧦',7,15,'n','#ef5350'],['❄️',7,10,'s','#81d4fa'],
+['🍌',8,10,'n','#fdd835'],['🦌',8,25,'n','#8d6e63'],['🎅',9,50,'s','#e53935'],
+['🥥',10,10,'n','#bcaaa4'],['⛄',10,25,'n','#e0f7fa'],['🍐',11,10,'n','#cddc39'],
+['🧁',12,15,'n','#f48fb1'],['🕯️',13,20,'n','#ffb74d'],['🍬',14,15,'n','#ab47bc']];
+const BOMB=['💣',0,0,'b','#777'];
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+let st={on:false,paused:true},items=[],halves=[],parts=[],pops=[],trail=[],snd=true,ac=null,swipe=0,last=null,best={};
+try{best=JSON.parse(localStorage.getItem('xmasNinja')||'{}')}catch(e){}
+function note(f,d=.18,t='sine',v=.12){if(!snd)return;try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.type=t;o.frequency.value=f;g.gain.setValueAtTime(v,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+d);o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}}
+const SC=[523,587,659,784,880,1047,1175,1319];
+function P(){const L=Math.min(st.lv,20),g=st.gentle;return{
+ iv:g?Math.max(1,2.1-.05*L):Math.max(.55,1.7-.07*L),
+ wave:Math.min(5,g?1+Math.floor(L/6):1+Math.floor(L/3)),
+ bomb:(!g&&st.lv>=3)?Math.min(.06+.012*st.lv,.2):0,
+ size:g?1.25:Math.max(.85,1.1-.012*L),
+ spd:g?Math.min(.7+.02*L,.95):Math.min(.85+.03*L,1.35)}}
+function pick(){const pool=IT.filter(i=>i[1]<=st.lv),sp=pool.filter(i=>i[3]=='s'),nn=pool.filter(i=>i[3]=='n');return sp.length&&Math.random()<.08?rnd(sp):rnd(nn)}
+function spawn(def,free){const p=P(),r=R0*p.size,g=H*1.3,x=W*(.12+Math.random()*.76),h=H*(.55+Math.random()*.25),vy=-Math.sqrt(2*g*h),T=2*-vy/g,x2=W*(.25+Math.random()*.5);
+ items.push({d:def,x,y:H+r,vx:(x2-x)/T,vy,r,rot:0,vr:(Math.random()-.5)*4,free})}
+function wave(){const p=P();for(let i=0;i<p.wave;i++){const b=Math.random()<p.bomb&&i>0||(p.wave==1&&Math.random()<p.bomb);spawn(b?BOMB:pick())}}
+function dseg(px,py,ax,ay,bx,by){const dx=bx-ax,dy=by-ay,l=dx*dx+dy*dy;let t=l?((px-ax)*dx+(py-ay)*dy)/l:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-ax-t*dx,py-ay-t*dy)}
+function say(t,x,y,c='#fff'){pops.push({t,x,y,c,a:1})}
+function cut(it){items.splice(items.indexOf(it),1);const d=it.d;swipe++;
+ for(const s of[-1,1])halves.push({e:d[0],x:it.x,y:it.y,vx:s*(60+Math.random()*80)+it.vx*.3,vy:it.vy*.3-60,r:it.r,rot:it.rot,vr:s*(2+Math.random()*3),s});
+ for(let i=0;i<14;i++){const a=Math.random()*6.28,v=80+Math.random()*220;parts.push({x:it.x,y:it.y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-80,c:d[4],r:2+Math.random()*4,a:1})}
+ if(d[3]=='b'){note(110,.5,'sawtooth',.2);st.shake=.5;say('哎呀！是炸彈',it.x,it.y,'#ff8a80');if(!st.gentle)loseLife();return}
+ note(SC[Math.min(swipe-1,SC.length-1)],.25,'triangle');
+ st.score+=d[2];say('+'+d[2],it.x,it.y,'#ffd54f');
+ if(d[0]=='🎁'){if(!st.gentle&&st.lives<5){st.lives++;say('生命 +1 ❤️',it.x,it.y-30,'#ff8a80')}else say('驚喜禮物！',it.x,it.y-30,'#ff8a80')}
+ if(d[0]=='❄️'){st.freeze=5;say('時間變慢 ❄️',it.x,it.y-30,'#81d4fa')}
+ if(d[0]=='🎅'){say('禮物雨！🎁',W/2,H*.4,'#ffd54f');for(let i=0;i<6;i++)spawn(rnd(IT.filter(x=>x[1]<=st.lv&&x[3]=='n')),true)}}
+function loseLife(){st.lives--;st.flash=.4;if(st.lives<=0)over()}
+function over(){st.on=false;const k=st.gentle?'g':'c';if(st.score>(best[k]||0)){best[k]=st.score;try{localStorage.setItem('xmasNinja',JSON.stringify(best))}catch(e){}}
+ menu('🎄 遊戲結束','得分 <b style="color:#ffd54f;font-size:1.4em">'+st.score+'</b><br>到達第 '+st.lv+' 關　最高分 '+best[k],[['再玩一次',()=>start(st.gentle),'']])}
+function menu(t,sub,bs){$('menu').style.display='flex';const b=$('box');b.innerHTML='<h1>'+t+'</h1><p>'+sub+'</p>';
+ for(const[l,f,c,s]of bs){const e=document.createElement('button');e.className='b '+c;e.innerHTML=l+(s?'<small>'+s+'</small>':'');e.onclick=()=>{note(659,.15);f()};b.appendChild(e)}}
+function home(){st.on=false;st.paused=true;menu('🎅 聖誕水果忍者','用手指在畫面上「劃過」水果，就能切開它！<br>越玩越有趣，會出現更多聖誕小物喔',[
+ ['🌿 悠閒模式',()=>start(true),'','物品大、速度慢、沒有炸彈，不會失敗，想玩多久都可以'],
+ ['🔥 挑戰模式',()=>start(false),'r','有 5 條命，漏掉會扣命，小心炸彈！']])
+ const e=document.createElement('p');e.style.fontSize='15px';e.textContent='最高分　悠閒 '+(best.g||0)+'　挑戰 '+(best.c||0);$('box').appendChild(e)}
+function start(g){st={on:true,paused:false,gentle:g,score:0,lives:5,t:0,lv:0,spawnT:.6,freeze:0,shake:0,flash:0};items=[];halves=[];parts=[];pops=[];$('menu').style.display='none';levelUp(1)}
+function levelUp(n){const nw=IT.filter(i=>i[1]==n).map(i=>i[0]).join(' ');st.lv=n;const b=$('ban');b.innerHTML='第 '+n+' 關'+(nw?'<small>新朋友：'+nw+'</small>':(n>3&&!st.gentle&&n>=3?'<small>加油！</small>':''));b.classList.remove('show');void b.offsetWidth;b.classList.add('show');if(n>1)[523,659,784,1047].forEach((f,i)=>setTimeout(()=>note(f,.3,'triangle'),i*110))}
+$('pa').onclick=()=>{if(!st.on)return;st.paused=true;menu('⏸ 暫停','休息一下，準備好再繼續',[['▶ 繼續',()=>{st.paused=false;$('menu').style.display='none'},''],['結束遊戲',()=>over(),'g']])};
+$('mu').onclick=()=>{snd=!snd;$('mu').textContent=snd?'🔊':'🔇'};
+let lp=null;
+C.addEventListener('pointerdown',e=>{lp={x:e.clientX,y:e.clientY};swipe=0;trail=[{x:lp.x,y:lp.y,t:performance.now()}];note(1,.01,'sine',.001)});
+C.addEventListener('pointermove',e=>{if(!lp)return;const n={x:e.clientX,y:e.clientY};trail.push({...n,t:performance.now()});
+ if(st.on&&!st.paused)for(const it of items.slice())if(dseg(it.x,it.y,lp.x,lp.y,n.x,n.y)<it.r*1.15)cut(it);lp=n});
+const endS=()=>{if(swipe>=3&&st.on){const b=swipe*5;st.score+=b;say('連擊 ×'+swipe+'！+'+b,W/2,H*.3,'#ffd54f');[784,988,1175,1568].forEach((f,i)=>setTimeout(()=>note(f,.2,'triangle'),i*70))}lp=null;swipe=0};
+addEventListener('pointerup',endS);addEventListener('pointercancel',endS);
+function frame(ts){requestAnimationFrame(frame);const dt=Math.min((ts-(last||ts))/1000,.033);last=ts;
+ if(st.on&&!st.paused){st.t+=dt;const lt=st.gentle?40:25,nl=1+Math.floor(st.t/lt);if(nl>st.lv)levelUp(nl);
+  if(st.freeze>0)st.freeze-=dt;const p=P(),d=dt*p.spd*(st.freeze>0?.4:1);
+  st.spawnT-=d;if(st.spawnT<=0){wave();st.spawnT=p.iv*(.8+Math.random()*.4)}
+  const g=H*1.3;
+  for(const it of items.slice()){it.x+=it.vx*d;it.vy+=g*d;it.y+=it.vy*d;it.rot+=it.vr*d;
+   if(it.y>H+it.r*1.6&&it.vy>0){items.splice(items.indexOf(it),1);if(it.d[3]=='n'&&!it.free&&!st.gentle){loseLife();say('漏掉了',Math.max(40,Math.min(W-40,it.x)),H-60,'#ff8a80')}}}
+  for(const h of halves){h.x+=h.vx*d;h.vy+=g*d;h.y+=h.vy*d;h.rot+=h.vr*d}halves=halves.filter(h=>h.y<H+h.r*2);
+  st.shake=Math.max(0,st.shake-dt);st.flash=Math.max(0,st.flash-dt)}
+ for(const q of parts){q.x+=q.vx*dt;q.vy+=600*dt;q.y+=q.vy*dt;q.a-=dt*1.4}parts=parts.filter(q=>q.a>0);
+ for(const q of pops){q.y-=40*dt;q.a-=dt*.9}pops=pops.filter(q=>q.a>0);
+ const now=performance.now();trail=trail.filter(t=>now-t.t<220);
+ draw(ts/1000);hud()}
+function hud(){$('sc').textContent=st.score||0;$('lv').textContent=st.on?(st.gentle?'🌿 悠閒　':'')+'第 '+st.lv+' 關':'';
+ $('li').textContent=st.on&&!st.gentle?'❤️'.repeat(st.lives)+'🖤'.repeat(5-st.lives):''}
+function draw(t){X.save();if(st.shake>0)X.translate((Math.random()-.5)*14,(Math.random()-.5)*14);
+ const g=X.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0b1a3a');g.addColorStop(.7,'#1e3a6e');g.addColorStop(1,'#2d5a8c');X.fillStyle=g;X.fillRect(-20,-20,W+40,H+40);
+ X.font=`${Math.min(W,H)*.14}px ${EF}`;X.textAlign='center';X.textBaseline='middle';X.globalAlpha=.9;X.fillText('🌙',W*.82,H*.14);X.globalAlpha=.25;
+ [.1,.3,.55,.78,.95].forEach((f,i)=>X.fillText('🎄',W*f,H*(.93-(i%2)*.03)));X.globalAlpha=1;
+ X.fillStyle='#e8f1ff';X.beginPath();X.ellipse(W/2,H+H*.02,W*.8,H*.07,0,0,6.3);X.fill();
+ X.fillStyle='#fffc';for(const s of snow){s.y+=s.s*.016;s.x+=Math.sin(t+s.p)*.4;if(s.y>H){s.y=-5;s.x=Math.random()*W}X.beginPath();X.arc(s.x,s.y,s.r,0,6.3);X.fill()}
+ for(const it of items){X.save();X.translate(it.x,it.y);X.rotate(it.rot);X.font=`${it.r*2}px ${EF}`;X.fillText(it.d[0],0,0);X.restore()}
+ for(const h of halves){X.save();X.translate(h.x,h.y);X.rotate(h.rot);X.beginPath();X.rect(h.s<0?-h.r*1.3:0,-h.r*1.3,h.r*1.3,h.r*2.6);X.clip();X.font=`${h.r*2}px ${EF}`;X.fillText(h.e,0,0);X.restore()}
+ for(const q of parts){X.globalAlpha=Math.max(0,q.a);X.fillStyle=q.c;X.beginPath();X.arc(q.x,q.y,q.r,0,6.3);X.fill()}X.globalAlpha=1;
+ if(trail.length>1){X.lineCap='round';X.lineJoin='round';for(const[w,c]of[[14,'rgba(255,213,79,.35)'],[6,'#fff']]){X.strokeStyle=c;X.lineWidth=w;X.beginPath();trail.forEach((p,i)=>i?X.lineTo(p.x,p.y):X.moveTo(p.x,p.y));X.stroke()}}
+ X.font=`800 ${Math.max(22,R0*.6)}px sans-serif`;X.lineWidth=5;X.strokeStyle='#000a';
+ for(const q of pops){X.globalAlpha=Math.max(0,q.a);X.strokeText(q.t,q.x,q.y);X.fillStyle=q.c;X.fillText(q.t,q.x,q.y)}X.globalAlpha=1;
+ if(st.freeze>0){X.fillStyle='rgba(129,212,250,.15)';X.fillRect(0,0,W,H)}
+ if(st.flash>0){X.fillStyle=`rgba(229,57,53,${st.flash})`;X.fillRect(0,0,W,H)}
+ X.restore()}
+home();requestAnimationFrame(frame);
+</script></body></html>
